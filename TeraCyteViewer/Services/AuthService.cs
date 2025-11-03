@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TeraCyteViewer.Models;
 
 namespace TeraCyteViewer.Services
 {
@@ -22,16 +23,19 @@ namespace TeraCyteViewer.Services
             _log = log;
         }
 
+        // Performs login using username/password and stores the received tokens.
         public async Task<bool> LoginAsync(string username, string password, CancellationToken ct = default)
         {
             _log.LogInformation("Login attempt for user {User}", username);
             var client = _factory.CreateClient("TeraCyte");
+
             using var resp = await client.PostAsJsonAsync("api/auth/login", new { username, password }, ct);
-            var ok = resp.IsSuccessStatusCode;
             _log.LogInformation("Login result for {User}: {StatusCode}", username, (int)resp.StatusCode);
 
-            if (!ok) return false;
+            if (!resp.IsSuccessStatusCode)
+                return false;
 
+            // Parse token response
             var json = await resp.Content.ReadFromJsonAsync<LoginResponse>(cancellationToken: ct);
             if (json is null || string.IsNullOrEmpty(json.access_token))
             {
@@ -39,6 +43,7 @@ namespace TeraCyteViewer.Services
                 return false;
             }
 
+            // Save tokens and compute expiry slightly earlier to avoid edge cases.
             AccessToken = json.access_token;
             RefreshToken = json.refresh_token;
             ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(json.expires_in - 30);
@@ -47,19 +52,17 @@ namespace TeraCyteViewer.Services
             return true;
         }
 
+        // Attempts to refresh the access token using the stored refresh token.
         public async Task<bool> RefreshAsync(CancellationToken ct = default)
         {
             try
             {
                 using var client = _factory.CreateClient("TeraCyte");
 
-                var request = new
-                {
-                    refresh_token = RefreshToken
-                };
-
+                var request = new { refresh_token = RefreshToken };
                 var response = await client.PostAsJsonAsync("api/auth/refresh", request, ct);
                 var body = await response.Content.ReadAsStringAsync(ct);
+
                 _log.LogInformation("Refresh token -> {Status}", (int)response.StatusCode);
 
                 if (!response.IsSuccessStatusCode)
@@ -68,6 +71,7 @@ namespace TeraCyteViewer.Services
                     return false;
                 }
 
+                // Deserialize response to extract new tokens.
                 var result = JsonSerializer.Deserialize<LoginResponse>(body);
                 if (result == null)
                 {
@@ -78,24 +82,19 @@ namespace TeraCyteViewer.Services
                 AccessToken = result.access_token;
                 RefreshToken = result.refresh_token;
                 ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(result.expires_in - 30);
-                _log.LogInformation("Token refreshed successfully, expires at {Time}", ExpiresAtUtc);
 
+                _log.LogInformation("Token refreshed successfully, expires at {Time}", ExpiresAtUtc);
                 return true;
             }
             catch (Exception ex)
             {
+                // Any unexpected error during refresh should be logged and handled gracefully.
                 _log.LogError(ex, "Exception during token refresh");
                 return false;
             }
         }
 
-
-        private sealed class LoginResponse
-        {
-            public string access_token { get; set; } = "";
-            public string refresh_token { get; set; } = "";
-            public string token_type { get; set; } = "";
-            public int expires_in { get; set; }
-        }
+        
+      
     }
 }

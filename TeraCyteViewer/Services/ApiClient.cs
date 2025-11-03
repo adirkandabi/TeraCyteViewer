@@ -8,7 +8,6 @@ using System.Text.Json.Serialization;
 using System;
 using TeraCyteViewer.Models;
 
-
 namespace TeraCyteViewer.Services
 {
     public class ApiClient
@@ -17,6 +16,7 @@ namespace TeraCyteViewer.Services
         private readonly AuthService _auth;
         private readonly ILogger<ApiClient> _log;
 
+        // Configure JSON parsing to accept numeric strings and ignore casing differences.
         private static readonly JsonSerializerOptions JsonOpts = new()
         {
             NumberHandling = JsonNumberHandling.AllowReadingFromString,
@@ -30,6 +30,7 @@ namespace TeraCyteViewer.Services
             _log = log;
         }
 
+        // Creates an HttpClient preconfigured with the access token if available.
         private HttpClient CreateClient()
         {
             var c = _factory.CreateClient("TeraCyte");
@@ -39,6 +40,7 @@ namespace TeraCyteViewer.Services
             return c;
         }
 
+        // Executes an HTTP call with automatic retry on 401 (token expired) once after refresh.
         private async Task<T> WithAuthRetry<T>(Func<HttpClient, Task<T>> action, CancellationToken ct = default)
         {
             using var client = CreateClient();
@@ -54,13 +56,16 @@ namespace TeraCyteViewer.Services
                 {
                     _log.LogWarning("401 detected{Suffix}", triedRefresh ? " (after refresh)" : string.Empty);
 
+                    // If we already retried after refresh, force logout.
                     if (triedRefresh)
                         throw new UnauthorizedAccessException("Session expired. Please log in again.", ex);
 
+                    // Try to refresh the token once.
                     var ok = await _auth.RefreshAsync(ct);
                     if (!ok)
                         throw new UnauthorizedAccessException("Session expired. Please log in again.");
 
+                    // Re-attach the new token and retry once.
                     if (!string.IsNullOrEmpty(_auth.AccessToken))
                         client.DefaultRequestHeaders.Authorization =
                             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _auth.AccessToken);
@@ -75,6 +80,7 @@ namespace TeraCyteViewer.Services
                 => ex.Message.Contains("401");
         }
 
+        // Fetches the latest image data from the API, with retry and logging.
         public async Task<ImageResponse> GetImageAsync(CancellationToken ct = default)
         {
             return await WithAuthRetry(async client =>
@@ -95,6 +101,7 @@ namespace TeraCyteViewer.Services
             }, ct);
         }
 
+        // Fetches image analysis results, retries transient errors, and logs details.
         public async Task<ResultsResponse> GetResultsAsync(CancellationToken ct = default)
         {
             return await WithAuthRetry(async client =>
@@ -111,14 +118,16 @@ namespace TeraCyteViewer.Services
                     var obj = JsonSerializer.Deserialize<ResultsResponse>(body, JsonOpts);
                     _log.LogInformation("Results received id={Id} avg={Avg} focus={Focus} label={Label}",
                         obj?.image_id, obj?.intensity_average, obj?.focus_score, obj?.classification_label);
-                    _log.LogInformation("histogram received :{Histogram}",obj?.histogram );
+                    _log.LogInformation("histogram received :{Histogram}", obj?.histogram);
                     return obj!;
                 });
             }, ct);
         }
 
+        // Helper: truncates long responses in logs to avoid noise.
         private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "...";
 
+        // Executes an action with retry on transient (5xx) server errors.
         private static async Task<T> WithTransientRetry<T>(Func<Task<T>> action)
         {
             int attempt = 0;
@@ -131,6 +140,7 @@ namespace TeraCyteViewer.Services
                 catch (HttpRequestException ex) when (attempt < 2 && IsTransient(ex))
                 {
                     attempt++;
+                    // Small backoff with jitter before retrying.
                     var delay = TimeSpan.FromMilliseconds(300 * attempt + Random.Shared.Next(0, 200));
                     await Task.Delay(delay);
                 }
@@ -142,9 +152,5 @@ namespace TeraCyteViewer.Services
                    ex.Message.Contains("503") ||
                    ex.Message.Contains("504");
         }
-
-     
-
-       
     }
 }

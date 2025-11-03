@@ -13,22 +13,24 @@ namespace TeraCyteViewer.Services
         private readonly LiveViewModel _vm;
         private readonly ILogger<PollingService> _log;
         private readonly TimeSpan _interval;
-        private  INavigationService? _nav;
+        private INavigationService? _nav;
         private readonly AuthService _auth;
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private string? _lastImageId;
 
-        public PollingService(ApiClient api, LiveViewModel vm, ILogger<PollingService> log,  AuthService auth, TimeSpan? interval = null)
+        public PollingService(ApiClient api, LiveViewModel vm, ILogger<PollingService> log, AuthService auth, TimeSpan? interval = null)
         {
             _api = api;
             _vm = vm;
             _log = log;
-            
             _auth = auth;
             _interval = interval ?? TimeSpan.FromSeconds(3);
         }
+
         public void SetNavigator(INavigationService nav) => _nav = nav;
+
+        // Starts background polling loop if not already running.
         public void Start()
         {
             if (_loopTask != null && !_loopTask.IsCompleted) return;
@@ -37,6 +39,7 @@ namespace TeraCyteViewer.Services
             _log.LogInformation("Polling started with interval {Interval}ms", _interval.TotalMilliseconds);
         }
 
+        // Main polling loop: repeatedly fetches image + results, handles UI updates and error states.
         private async Task LoopAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
@@ -45,25 +48,26 @@ namespace TeraCyteViewer.Services
                 {
                     var img = await _api.GetImageAsync(token);
 
+                    // Detect when a new image arrives
                     if (img.image_id != _lastImageId)
                     {
                         _log.LogInformation("New image detected: {Id}", img.image_id);
                         _lastImageId = img.image_id;
 
-                        // Update ImageId immediately so the UI always shows the latest id
+                        // Immediately update status to show new image is being processed
                         await App.Current.Dispatcher.InvokeAsync(() =>
                         {
                             _vm.ImageId = img.image_id;
                             _vm.StatusMessage = "New image detected. Fetching results...";
                             _vm.IsError = false;
-
                         });
 
-                        // Fetch results for this image
+                        // Request inference results for the new image
                         var res = await _api.GetResultsAsync(token);
 
                         if (res.image_id == img.image_id)
                         {
+                            // Validate inference data - sometimes backend may send invalid data
                             bool invalidData =
                                 string.Equals(res.classification_label, "UNKNOWN_CLASSIFICATION", StringComparison.OrdinalIgnoreCase)
                                 || res.intensity_average < 0
@@ -79,7 +83,6 @@ namespace TeraCyteViewer.Services
                                     _vm.IsStale = true;
                                     _vm.OverlayMessage = "Data not valid (retrying...)";
                                     _vm.ShowOverlay = true;
-
                                     _vm.ClassificationLabel = "Unknown";
                                     _vm.IntensityAverage = double.NaN;
                                     _vm.FocusScore = double.NaN;
@@ -87,11 +90,11 @@ namespace TeraCyteViewer.Services
                                     _vm.IsError = true;
                                 });
 
-                                // Skip updating the image or histogram - keep last good frame
+                                // Keep previous valid frame visible until next successful fetch
                                 continue;
                             }
 
-                            // Valid data - update normally
+                            // Convert image safely from base64; null means corrupted or malformed data.
                             var bmp = ImageHelper.FromBase64PngSafe(img.image_data_base64, _log);
                             if (bmp != null)
                             {
@@ -99,7 +102,6 @@ namespace TeraCyteViewer.Services
                                 {
                                     _vm.IsStale = false;
                                     _vm.ShowOverlay = false;
-
                                     _vm.ImageId = img.image_id;
                                     _vm.CurrentImage = bmp;
                                     _vm.ClassificationLabel = res.classification_label;
@@ -109,6 +111,8 @@ namespace TeraCyteViewer.Services
                                     _vm.LastUpdated = DateTime.Now;
                                     _vm.StatusMessage = "Image updated successfully";
                                     _vm.IsError = false;
+
+                                    // Append to history for quick recall
                                     _vm.AddToHistory(img, res, bmp);
                                 });
                             }
@@ -125,13 +129,12 @@ namespace TeraCyteViewer.Services
                                 });
                             }
                         }
-
                         else
                         {
+                            // The backend returned results for a different image (rare timing issue)
                             _log.LogWarning("Results out-of-sync: image {I1}, results {I2}", img.image_id, res.image_id);
                             await App.Current.Dispatcher.InvokeAsync(() =>
                             {
-                                // Keep showing the new ImageId; inform the user we're waiting for matching results
                                 _vm.StatusMessage = "Waiting for matching results...";
                                 _vm.IsStale = true;
                                 _vm.IsError = false;
@@ -141,6 +144,7 @@ namespace TeraCyteViewer.Services
                 }
                 catch (UnauthorizedAccessException uaex)
                 {
+                    // Token expired or invalid – gracefully stop and redirect to login.
                     _log.LogWarning(uaex, "Session expired. Navigating to login.");
                     Stop();
 
@@ -152,22 +156,23 @@ namespace TeraCyteViewer.Services
                         _vm.StatusMessage = "Session expired.";
                         _vm.IsError = true;
 
-                        // clear tokens 
+                        // Reset token fields manually (AuthService keeps them private)
                         _auth.GetType().GetProperty("AccessToken")?.SetValue(_auth, null);
                         _auth.GetType().GetProperty("RefreshToken")?.SetValue(_auth, null);
 
                         _nav?.ShowLogin();
                     });
 
-                    return; // exit loop
+                    return; // Exit loop entirely
                 }
                 catch (Exception ex)
                 {
+                    // Handle transient API or network failures
                     _log.LogWarning(ex, "Polling iteration failed");
                     await App.Current.Dispatcher.InvokeAsync(() =>
                     {
                         _vm.IsStale = true;
-                        _vm.IsError = true; 
+                        _vm.IsError = true;
                         _vm.ShowOverlay = true;
                         _vm.OverlayMessage = "Temporary issue – keeping last good frame";
                         _vm.StatusMessage = "Temporary issue (will retry)...";
@@ -176,17 +181,20 @@ namespace TeraCyteViewer.Services
 
                 try
                 {
+                    // Wait before next iteration. cancellation will throw here if stopped.
                     await Task.Delay(_interval, token);
                 }
                 catch
                 {
-                    // ignore cancellation delay exceptions
+                    // Swallow cancellation exceptions during shutdown.
                 }
             }
         }
 
-
+        // Stops the polling loop gracefully.
         public void Stop() { _cts?.Cancel(); }
+
+        // Clean up resources.
         public void Dispose() { Stop(); _cts?.Dispose(); }
     }
 }

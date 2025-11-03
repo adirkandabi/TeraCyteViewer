@@ -14,7 +14,7 @@ TeraCyte Viewer connects to the TeraCyte assignment API to:
 - Display live image data, metrics, and histograms
 - Handle token refreshes, stale data, and API failures gracefully
 - Maintain a scrollable history of previously fetched images
-- Provide smooth animations and a clean, production-ready UX
+- Provide smooth animations
 
 ---
 
