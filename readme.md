@@ -47,8 +47,7 @@ TeraCyteViewer
 │
 ├── Utils/
 │ ├── ImageHelper.cs // Base64 → BitmapImage converter
-│ ├── BoolToVisibilityConverter.cs
-│ ├── BoolToOpacityConverter.cs
+│ ├── Converters.cs
 │
 └── App.xaml / App.xaml.cs // DI setup, logging, exception handling
 ```
@@ -83,18 +82,64 @@ TeraCyteViewer
 
 ---
 
+## 🧭 App Flow
+
+### **1️⃣ LoginViewModel → LoginView**
+
+- User enters credentials and authenticates.
+- On success, access and refresh tokens are stored securely.
+- Navigation automatically switches to the **LiveView** screen.
+
+---
+
+### **2️⃣ PollingService**
+
+- Runs in the background, calling the API every few seconds:
+  - `GET /api/image`
+  - `GET /api/results`
+- Detects when a **new `image_id`** appears.
+- Fetches and pairs the image with its matching results.
+- Notifies the **LiveViewModel** of updates.
+
+---
+
+### **3️⃣ LiveViewModel**
+
+- Updates observable properties:
+  - `CurrentImage`
+  - `ClassificationLabel`
+  - `IntensityAverage`
+  - `FocusScore`
+  - `Histogram`
+- Adds a new entry to the **History** collection.
+- Updates UI state:
+  - Status messages
+  - Brush color (green/yellow/red)
+  - Overlay messages
+- Triggers subtle animations for smooth transitions.
+
+---
+
+### **4️⃣ LiveView**
+
+- Displays the current microscope image and inference results.
+- Shows a **live histogram** (ScottPlot) for intensity distribution.
+- Provides a **scrollable history panel** of previous images.
+- Supports click events on history items:
+  - Opens a **HistoryPreviewWindow** popup to view full details (image, metrics, histogram).
+
+---
+
 ## ⚙️ Setup & Run
 
 ### Prerequisites
 
-- Windows 10+
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Visual Studio 2022 or VS Code
 
 ### Clone & Restore
 
 ```bash
-git clone https://github.com/yourusername/TeraCyteViewer.git
+git clone https://github.com/adirkandabi/TeraCyteViewer.git
 cd TeraCyteViewer
 dotnet restore
 ```
