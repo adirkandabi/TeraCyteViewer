@@ -2,10 +2,13 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using TeraCyteViewer.Models;
 using TeraCyteViewer.Services;
 using TeraCyteViewer.Utils;
 
@@ -20,6 +23,9 @@ namespace TeraCyteViewer.ViewModels
         [ObservableProperty] private string? imageId;
         [ObservableProperty] private DateTime lastUpdated;
         [ObservableProperty] private int[]? histogram;
+
+        public ObservableCollection<ImageResultItem> History { get; } = new();
+
 
         [ObservableProperty] private bool isBusy;
         [ObservableProperty] private bool isError;
@@ -84,6 +90,7 @@ namespace TeraCyteViewer.ViewModels
 
                 LastUpdated = DateTime.Now;
                 StatusMessage = "Updated successfully";
+                AddToHistory(img, res,CurrentImage);
                 _log.LogInformation("Manual refresh completed, image {Id}", img.image_id);
             }
             catch (Exception ex)
@@ -96,6 +103,39 @@ namespace TeraCyteViewer.ViewModels
             {
                 IsBusy = false;
             }
+        }
+        public void AddToHistory(ImageResponse img, ResultsResponse res, BitmapImage image)
+        {
+            if (image is null || string.IsNullOrEmpty(img.image_id))
+                return;
+
+            if (History.Count > 0 && History[0].ImageId == img.image_id)
+                return;
+
+            DateTime ts = DateTime.Now;
+            if (!string.IsNullOrWhiteSpace(img.timestamp) &&
+                DateTime.TryParse(img.timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var parsed))
+            {
+                ts = parsed.ToLocalTime();
+            }
+
+            var item = new ImageResultItem
+            {
+                ImageId = img.image_id,
+                Image = image,
+                Label = res.classification_label ?? "",
+                Intensity = res.intensity_average,
+                Focus = res.focus_score,
+                Timestamp = ts,
+                Histogram = res.histogram?.ToArray()
+
+            };
+
+            History.Insert(0, item);
+
+            const int maxItems = 100;
+            if (History.Count > maxItems)
+                History.RemoveAt(History.Count - 1);
         }
     }
 }

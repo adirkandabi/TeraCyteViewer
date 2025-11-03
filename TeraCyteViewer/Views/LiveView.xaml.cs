@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using TeraCyteViewer.Models;
 
 namespace TeraCyteViewer.Views
 {
@@ -23,6 +24,18 @@ namespace TeraCyteViewer.Views
         public LiveView()
         {
             InitializeComponent();
+        }
+        private void HistoryItem_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is ImageResultItem item)
+            {
+                var dlg = new Views.HistoryPreviewWindow
+                {
+                    Owner = Window.GetWindow(this),
+                    DataContext = item
+                };
+                dlg.ShowDialog();
+            }
         }
     }
 }

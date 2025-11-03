@@ -109,6 +109,7 @@ namespace TeraCyteViewer.Services
                                     _vm.LastUpdated = DateTime.Now;
                                     _vm.StatusMessage = "Image updated successfully";
                                     _vm.IsError = false;
+                                    _vm.AddToHistory(img, res, bmp);
                                 });
                             }
                             else
@@ -132,6 +133,7 @@ namespace TeraCyteViewer.Services
                             {
                                 // Keep showing the new ImageId; inform the user we're waiting for matching results
                                 _vm.StatusMessage = "Waiting for matching results...";
+                                _vm.IsStale = true;
                                 _vm.IsError = false;
                             });
                         }

@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json.Serialization;
 using System;
+using TeraCyteViewer.Models;
+
 
 namespace TeraCyteViewer.Services
 {
@@ -109,6 +111,7 @@ namespace TeraCyteViewer.Services
                     var obj = JsonSerializer.Deserialize<ResultsResponse>(body, JsonOpts);
                     _log.LogInformation("Results received id={Id} avg={Avg} focus={Focus} label={Label}",
                         obj?.image_id, obj?.intensity_average, obj?.focus_score, obj?.classification_label);
+                    _log.LogInformation("histogram received :{Histogram}",obj?.histogram );
                     return obj!;
                 });
             }, ct);
@@ -140,20 +143,8 @@ namespace TeraCyteViewer.Services
                    ex.Message.Contains("504");
         }
 
-        public sealed class ImageResponse
-        {
-            public string image_id { get; set; } = "";
-            public string timestamp { get; set; } = "";
-            public string image_data_base64 { get; set; } = "";
-        }
+     
 
-        public sealed class ResultsResponse
-        {
-            public string image_id { get; set; } = "";
-            public double intensity_average { get; set; }
-            public double focus_score { get; set; }
-            public string classification_label { get; set; } = "";
-            public System.Collections.Generic.List<int> histogram { get; set; } = new();
-        }
+       
     }
 }
