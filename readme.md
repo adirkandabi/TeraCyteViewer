@@ -151,3 +151,9 @@ dotnet run --project TeraCyteViewer
 ```
 
 Or directly from Visual Studio (F5)
+
+### Screenshots
+
+![Login View](TeraCyteViewer/assets/screenshots/loginView.png)
+![Live View](TeraCyteViewer/assets/screenshots/liveView.png)
+![History Window View](TeraCyteViewer/assets/screenshots/HistoryWindowView.png)
