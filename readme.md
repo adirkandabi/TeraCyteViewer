@@ -7,7 +7,7 @@ Built with **.NET 8**, **MVVM**, and **WPF**, featuring JWT authentication, auto
 
 ## 🚀 Overview
 
-TeraCyte Viewer connects to the [TeraCyte assignment API](https://assignment-server-rv-866595813231.us-central1.run.app/) to:
+TeraCyte Viewer connects to the TeraCyte assignment API to:
 
 - Authenticate users via JWT tokens
 - Poll protected endpoints for real-time microscope images and inference results
@@ -18,8 +18,9 @@ TeraCyte Viewer connects to the [TeraCyte assignment API](https://assignment-ser
 
 ---
 
-## 🧩 Architecture at a Glance
+## 🧩 Architecture
 
+```
 TeraCyteViewer
 │
 ├── Models/
@@ -50,6 +51,7 @@ TeraCyteViewer
 │ ├── BoolToOpacityConverter.cs
 │
 └── App.xaml / App.xaml.cs // DI setup, logging, exception handling
+```
 
 ---
 
