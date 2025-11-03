@@ -27,6 +27,7 @@ TeraCyteViewer
 │ ├── ImageResponse.cs // /api/image DTO
 │ ├── ResultsResponse.cs // /api/results DTO
 │ └── ImageResultItem.cs // History item (image + metrics)
+  └── LoginResponse.cs // /api/auth/login DTO
 │
 ├── Services/
 │ ├── AuthService.cs // JWT login, refresh, expiry logic
